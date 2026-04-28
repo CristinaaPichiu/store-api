@@ -12,12 +12,18 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -30,15 +36,16 @@ public class AuthController {
 
     @Operation(summary = "Register a new user")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "User registered successfully"),
+            @ApiResponse(responseCode = "200", description = "User registered successfully",
+                    content = @Content(schema = @Schema(example = "User registered successfully"))),
             @ApiResponse(responseCode = "409", description = "Email already exists",
                     content = @Content(schema = @Schema(example = "User already exists")))
     })
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<String> register(@Valid @RequestBody RegisterRequest request) {
         try {
             userService.register(request);
-            return ResponseEntity.ok().build();
+            return ResponseEntity.ok("User registered successfully");
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(e.getMessage());
         }
@@ -55,7 +62,8 @@ public class AuthController {
     })
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody RegisterRequest request,
-                                   HttpServletRequest httpRequest) {
+                                   HttpServletRequest httpRequest,
+                                   HttpServletResponse httpResponse) {
         String email = request.getEmail();
 
         if (loginAttemptService.isBlocked(email)) {
@@ -69,14 +77,21 @@ public class AuthController {
 
             if (!userService.checkPassword(user, request.getPassword())) {
                 loginAttemptService.loginFailed(email);
-                int remaining = 5 - 1; // will be calculated below
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body("Invalid password");
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid password");
             }
 
             loginAttemptService.loginSucceeded(email);
+
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of());
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+
             HttpSession session = httpRequest.getSession(true);
             session.setAttribute("userId", user.getId());
+            session.setAttribute(
+                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                    SecurityContextHolder.getContext()
+            );
 
             return ResponseEntity.ok(new LoginResponse(session.getId()));
 
