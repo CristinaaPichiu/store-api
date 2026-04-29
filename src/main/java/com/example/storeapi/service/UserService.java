@@ -1,6 +1,8 @@
 package com.example.storeapi.service;
 
 import com.example.storeapi.dto.RegisterRequest;
+import com.example.storeapi.exception.ConflictException;
+import com.example.storeapi.exception.InvalidCredentialsException;
 import com.example.storeapi.model.User;
 import com.example.storeapi.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +18,7 @@ public class UserService {
 
     public User register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
-            throw new RuntimeException("User already exists");
+            throw new ConflictException("User already exists");
         }
 
         User user = new User();
@@ -28,7 +30,7 @@ public class UserService {
 
     public User findByEmail(String email) {
         return userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(InvalidCredentialsException::new);
     }
 
     public boolean checkPassword(User user, String rawPassword) {

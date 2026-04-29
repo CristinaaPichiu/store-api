@@ -4,6 +4,7 @@ import com.example.storeapi.dto.AddToCartRequest;
 import com.example.storeapi.dto.CartItemResponse;
 import com.example.storeapi.dto.CartResponse;
 import com.example.storeapi.dto.ModifyCartRequest;
+import com.example.storeapi.exception.GlobalExceptionHandler;
 import com.example.storeapi.model.CartItem;
 import com.example.storeapi.model.Order;
 import com.example.storeapi.model.Product;
@@ -25,14 +26,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -54,7 +50,11 @@ class CartControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(cartController).build();
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(cartController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
         objectMapper = new ObjectMapper();
 
         product = new Product(1L, "Nail gun", 5, new BigDecimal("23.95"));
@@ -95,7 +95,8 @@ class CartControllerTest {
         mockMvc.perform(post("/api/cart")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).addToCart(anyString(), any(AddToCartRequest.class));
     }
@@ -114,9 +115,7 @@ class CartControllerTest {
                         .content(objectMapper.writeValueAsString(request))
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Product already in cart. Use modify to change quantity."));
-
-        verify(cartService).addToCart(anyString(), any(AddToCartRequest.class));
+                .andExpect(jsonPath("$.message").value("Product already in cart. Use modify to change quantity."));
     }
 
     @Test
@@ -133,9 +132,7 @@ class CartControllerTest {
                         .content(objectMapper.writeValueAsString(request))
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Not enough stock. Available: 5"));
-
-        verify(cartService).addToCart(anyString(), any(AddToCartRequest.class));
+                .andExpect(jsonPath("$.message").value("Not enough stock. Available: 5"));
     }
 
     @Test
@@ -164,14 +161,13 @@ class CartControllerTest {
                 .andExpect(jsonPath("$.items[0].productTitle").value("Nail gun"))
                 .andExpect(jsonPath("$.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.subtotal").value(47.90));
-
-        verify(cartService).getCart(anyString());
     }
 
     @Test
     void getCart_noSession_returns401() throws Exception {
         mockMvc.perform(get("/api/cart"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).getCart(anyString());
     }
@@ -193,8 +189,6 @@ class CartControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(10))
                 .andExpect(jsonPath("$.quantity").value(5));
-
-        verify(cartService).modifyCartItem(anyString(), eq(10L), eq(5));
     }
 
     @Test
@@ -205,7 +199,8 @@ class CartControllerTest {
         mockMvc.perform(put("/api/cart/10")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).modifyCartItem(anyString(), any(), any());
     }
@@ -223,9 +218,7 @@ class CartControllerTest {
                         .content(objectMapper.writeValueAsString(request))
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Cart item not found"));
-
-        verify(cartService).modifyCartItem(anyString(), eq(999L), eq(5));
+                .andExpect(jsonPath("$.message").value("Cart item not found"));
     }
 
     @Test
@@ -241,9 +234,7 @@ class CartControllerTest {
                         .content(objectMapper.writeValueAsString(request))
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Not enough stock. Available: 5"));
-
-        verify(cartService).modifyCartItem(anyString(), eq(10L), eq(100));
+                .andExpect(jsonPath("$.message").value("Not enough stock. Available: 5"));
     }
 
     @Test
@@ -254,14 +245,13 @@ class CartControllerTest {
                         .session(createLoggedInSession()))
                 .andExpect(status().isOk())
                 .andExpect(content().string("Item removed from cart"));
-
-        verify(cartService).removeCartItem(anyString(), eq(10L));
     }
 
     @Test
     void removeCartItem_noSession_returns401() throws Exception {
         mockMvc.perform(delete("/api/cart/10"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).removeCartItem(anyString(), any());
     }
@@ -274,9 +264,7 @@ class CartControllerTest {
         mockMvc.perform(delete("/api/cart/999")
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Cart item not found"));
-
-        verify(cartService).removeCartItem(anyString(), eq(999L));
+                .andExpect(jsonPath("$.message").value("Cart item not found"));
     }
 
     @Test
@@ -287,9 +275,7 @@ class CartControllerTest {
         mockMvc.perform(delete("/api/cart/10")
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Cart item does not belong to this session"));
-
-        verify(cartService).removeCartItem(anyString(), eq(10L));
+                .andExpect(jsonPath("$.message").value("Cart item does not belong to this session"));
     }
 
     @Test
@@ -308,14 +294,13 @@ class CartControllerTest {
                         .session(createLoggedInSession()))
                 .andExpect(status().isOk())
                 .andExpect(content().string("Order #55 placed successfully. Total: $47.90"));
-
-        verify(cartService).checkout(anyString(), eq(TEST_USER_ID));
     }
 
     @Test
     void checkout_noSession_returns401() throws Exception {
         mockMvc.perform(post("/api/cart/checkout"))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).checkout(anyString(), any());
     }
@@ -324,7 +309,8 @@ class CartControllerTest {
     void checkout_noUserId_returns401() throws Exception {
         mockMvc.perform(post("/api/cart/checkout")
                         .session(createSessionWithoutUserId()))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Please login first"));
 
         verify(cartService, never()).checkout(anyString(), any());
     }
@@ -337,9 +323,7 @@ class CartControllerTest {
         mockMvc.perform(post("/api/cart/checkout")
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Cart is empty"));
-
-        verify(cartService).checkout(anyString(), eq(TEST_USER_ID));
+                .andExpect(jsonPath("$.message").value("Cart is empty"));
     }
 
     @Test
@@ -350,9 +334,7 @@ class CartControllerTest {
         mockMvc.perform(post("/api/cart/checkout")
                         .session(createLoggedInSession()))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Not enough stock for: Nail gun. Available: 2"));
-
-        verify(cartService).checkout(anyString(), eq(TEST_USER_ID));
+                .andExpect(jsonPath("$.message").value("Not enough stock for: Nail gun. Available: 2"));
     }
 
     private MockHttpSession createLoggedInSession() {

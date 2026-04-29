@@ -200,6 +200,6 @@ public class CartIntegrationTest extends IntegrationTestBase {
         mockMvc.perform(post("/api/cart/checkout")
                         .cookie(sessionCookie))
                 .andExpect(status().isBadRequest())
-                .andExpect(content().string("Cart is empty"));
+                .andExpect(jsonPath("$.message").value("Cart is empty"));
     }
 }

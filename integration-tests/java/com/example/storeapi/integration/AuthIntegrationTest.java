@@ -45,7 +45,7 @@ public class AuthIntegrationTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isConflict())
-                .andExpect(content().string("User already exists"));
+                .andExpect(jsonPath("$.message").value("User already exists"));
     }
 
     @Test
@@ -92,7 +92,8 @@ public class AuthIntegrationTest extends IntegrationTestBase {
                             "password": "wrongpassword"
                         }
                         """))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid credentials"));
     }
 
     @Test
@@ -105,7 +106,8 @@ public class AuthIntegrationTest extends IntegrationTestBase {
                             "password": "password123"
                         }
                         """))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid credentials"));
     }
 
     @Test
@@ -129,7 +131,8 @@ public class AuthIntegrationTest extends IntegrationTestBase {
                                 "password": "wrongpassword"
                             }
                             """))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.message").value("Invalid credentials"));
         }
 
         mockMvc.perform(post("/api/auth/login")
@@ -140,6 +143,8 @@ public class AuthIntegrationTest extends IntegrationTestBase {
                             "password": "wrongpassword"
                         }
                         """))
-                .andExpect(status().isTooManyRequests());
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message")
+                        .value(org.hamcrest.Matchers.containsString("Account temporarily locked")));
     }
 }

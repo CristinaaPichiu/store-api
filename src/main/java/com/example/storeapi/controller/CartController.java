@@ -30,9 +30,11 @@ public class CartController {
 
     private HttpSession getRequiredSession(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
+
         if (session == null || session.getAttribute("userId") == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please login first");
         }
+
         return session;
     }
 
@@ -47,11 +49,7 @@ public class CartController {
     public ResponseEntity<?> addToCart(@Valid @RequestBody AddToCartRequest request,
                                        HttpServletRequest httpRequest) {
         HttpSession session = getRequiredSession(httpRequest);
-        try {
-            return ResponseEntity.ok(cartService.addToCart(session.getId(), request));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        return ResponseEntity.ok(cartService.addToCart(session.getId(), request));
     }
 
     @Operation(summary = "Get cart contents with subtotal")
@@ -61,13 +59,9 @@ public class CartController {
             @ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @GetMapping
-    public ResponseEntity<?> getCart(HttpServletRequest httpRequest) {
+    public ResponseEntity<CartResponse> getCart(HttpServletRequest httpRequest) {
         HttpSession session = getRequiredSession(httpRequest);
-        try {
-            return ResponseEntity.ok(cartService.getCart(session.getId()));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        return ResponseEntity.ok(cartService.getCart(session.getId()));
     }
 
     @Operation(summary = "Modify quantity of a cart item")
@@ -82,30 +76,24 @@ public class CartController {
                                             @Valid @RequestBody ModifyCartRequest request,
                                             HttpServletRequest httpRequest) {
         HttpSession session = getRequiredSession(httpRequest);
-        try {
-            return ResponseEntity.ok(cartService.modifyCartItem(session.getId(), cartItemId, request.getQuantity()));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        return ResponseEntity.ok(
+                cartService.modifyCartItem(session.getId(), cartItemId, request.getQuantity())
+        );
     }
 
     @Operation(summary = "Remove an item from the cart")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Item removed successfully"),
-            @ApiResponse(responseCode = "400", description = "Item not found",
+            @ApiResponse(responseCode = "404", description = "Item not found",
                     content = @Content(schema = @Schema(example = "Cart item not found"))),
             @ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @DeleteMapping("/{cartItemId}")
-    public ResponseEntity<?> removeCartItem(@PathVariable Long cartItemId,
-                                            HttpServletRequest httpRequest) {
+    public ResponseEntity<String> removeCartItem(@PathVariable Long cartItemId,
+                                                 HttpServletRequest httpRequest) {
         HttpSession session = getRequiredSession(httpRequest);
-        try {
-            cartService.removeCartItem(session.getId(), cartItemId);
-            return ResponseEntity.ok("Item removed from cart");
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        cartService.removeCartItem(session.getId(), cartItemId);
+        return ResponseEntity.ok("Item removed from cart");
     }
 
     @Operation(summary = "Checkout and place order")
@@ -116,14 +104,14 @@ public class CartController {
             @ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkout(HttpServletRequest httpRequest) {
+    public ResponseEntity<String> checkout(HttpServletRequest httpRequest) {
         HttpSession session = getRequiredSession(httpRequest);
-        try {
-            Long userId = (Long) session.getAttribute("userId");
-            Order order = cartService.checkout(session.getId(), userId);
-            return ResponseEntity.ok("Order #" + order.getId() + " placed successfully. Total: $" + order.getTotal());
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+
+        Long userId = (Long) session.getAttribute("userId");
+        Order order = cartService.checkout(session.getId(), userId);
+
+        return ResponseEntity.ok(
+                "Order #" + order.getId() + " placed successfully. Total: $" + order.getTotal()
+        );
     }
 }

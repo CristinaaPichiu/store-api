@@ -1,7 +1,9 @@
 package com.example.storeapi.controller;
 
-import com.example.storeapi.dto.LoginResponse;
 import com.example.storeapi.dto.RegisterRequest;
+import com.example.storeapi.exception.ConflictException;
+import com.example.storeapi.exception.GlobalExceptionHandler;
+import com.example.storeapi.exception.InvalidCredentialsException;
 import com.example.storeapi.model.User;
 import com.example.storeapi.service.LoginAttemptService;
 import com.example.storeapi.service.UserService;
@@ -44,7 +46,11 @@ class AuthControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(authController).build();
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(authController)
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+
         objectMapper = new ObjectMapper();
 
         testUser = new User();
@@ -71,8 +77,8 @@ class AuthControllerTest {
         });
 
         mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registerRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isOk())
                 .andExpect(content().string("User registered successfully"));
 
@@ -82,13 +88,13 @@ class AuthControllerTest {
     @Test
     void register_emailAlreadyExists_returns409() throws Exception {
         when(userService.register(any(RegisterRequest.class)))
-                .thenThrow(new RuntimeException("User already exists"));
+                .thenThrow(new ConflictException("User already exists"));
 
         mockMvc.perform(post("/api/auth/register")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(registerRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerRequest)))
                 .andExpect(status().isConflict())
-                .andExpect(content().string("User already exists"));
+                .andExpect(jsonPath("$.message").value("User already exists"));
     }
 
     @Test
@@ -98,8 +104,8 @@ class AuthControllerTest {
         when(userService.checkPassword(testUser, "password123")).thenReturn(true);
 
         mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sessionId").exists())
                 .andExpect(jsonPath("$.sessionId").isNotEmpty());
@@ -118,10 +124,10 @@ class AuthControllerTest {
         wrongPasswordRequest.setPassword("wrong_password");
 
         mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(wrongPasswordRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(wrongPasswordRequest)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(content().string("Invalid password"));
+                .andExpect(jsonPath("$.message").value("Invalid credentials"));
 
         verify(loginAttemptService).loginFailed("test@example.com");
     }
@@ -130,15 +136,15 @@ class AuthControllerTest {
     void login_userNotFound_returns401() throws Exception {
         when(loginAttemptService.isBlocked("test@example.com")).thenReturn(false);
         when(userService.findByEmail("test@example.com"))
-                .thenThrow(new RuntimeException("User not found"));
+                .thenThrow(new InvalidCredentialsException());
 
         mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isUnauthorized())
-                .andExpect(content().string("User not found"));
+                .andExpect(jsonPath("$.message").value("Invalid credentials"));
 
-        verify(loginAttemptService).loginFailed("test@example.com");
+        verify(loginAttemptService, never()).loginFailed("test@example.com");
     }
 
     @Test
@@ -147,10 +153,11 @@ class AuthControllerTest {
         when(loginAttemptService.getMinutesUntilUnlock("test@example.com")).thenReturn(10L);
 
         mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isTooManyRequests())
-                .andExpect(content().string("Account temporarily locked. Try again in 10 minute(s)."));
+                .andExpect(jsonPath("$.message")
+                        .value("Account temporarily locked. Try again in 10 minute(s)."));
 
         verify(userService, never()).findByEmail(any());
     }
@@ -162,12 +169,13 @@ class AuthControllerTest {
         when(userService.checkPassword(testUser, "password123")).thenReturn(true);
 
         MvcResult result = mockMvc.perform(post("/api/auth/login")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(loginRequest)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginRequest)))
                 .andExpect(status().isOk())
                 .andReturn();
 
         HttpSession session = result.getRequest().getSession(false);
+
         assertThat(session).isNotNull();
         assertThat(session.getAttribute("userId")).isEqualTo(1L);
     }
