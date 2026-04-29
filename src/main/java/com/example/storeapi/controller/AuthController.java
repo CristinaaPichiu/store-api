@@ -16,9 +16,11 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.BadRequestException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.*;
@@ -62,8 +64,7 @@ public class AuthController {
     })
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody RegisterRequest request,
-                                   HttpServletRequest httpRequest,
-                                   HttpServletResponse httpResponse) {
+                                   HttpServletRequest httpRequest) throws BadRequestException {
         String email = request.getEmail();
 
         if (loginAttemptService.isBlocked(email)) {
@@ -72,32 +73,28 @@ public class AuthController {
                     .body("Account temporarily locked. Try again in " + minutes + " minute(s).");
         }
 
-        try {
-            User user = userService.findByEmail(email);
+        User user = userService.findByEmail(email);
 
-            if (!userService.checkPassword(user, request.getPassword())) {
-                loginAttemptService.loginFailed(email);
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid password");
-            }
-
-            loginAttemptService.loginSucceeded(email);
-
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of());
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-
-            HttpSession session = httpRequest.getSession(true);
-            session.setAttribute("userId", user.getId());
-            session.setAttribute(
-                    HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                    SecurityContextHolder.getContext()
-            );
-
-            return ResponseEntity.ok(new LoginResponse(session.getId()));
-
-        } catch (RuntimeException e) {
+        if (!userService.checkPassword(user, request.getPassword())) {
             loginAttemptService.loginFailed(email);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+            throw new BadRequestException("Invalid credentials");
         }
+
+        loginAttemptService.loginSucceeded(email);
+
+        HttpSession session = httpRequest.getSession(true);
+        session.setAttribute("userId", user.getId());
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(user.getEmail(), null, List.of());
+
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        session.setAttribute(
+                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
+                securityContext
+        );
+
+        return ResponseEntity.ok(new LoginResponse(session.getId()));
     }
 }

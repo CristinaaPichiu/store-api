@@ -109,7 +109,6 @@ public class CartService {
             throw new RuntimeException("Cart is empty");
         }
 
-        // Verify stock and calculate total
         BigDecimal total = BigDecimal.ZERO;
         for (CartItem cartItem : cartItems) {
             Product product = productRepository.findById(cartItem.getProduct().getId())
@@ -123,7 +122,6 @@ public class CartService {
             total = total.add(product.getPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())));
         }
 
-        // Create order
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
@@ -134,7 +132,6 @@ public class CartService {
         order.setStatus("CONFIRMED");
         Order savedOrder = orderRepository.save(order);
 
-        // Create order items and deduct stock
         for (CartItem cartItem : cartItems) {
             Product product = cartItem.getProduct();
 
@@ -145,12 +142,10 @@ public class CartService {
             orderItem.setPriceAtPurchase(product.getPrice());
             orderItemRepository.save(orderItem);
 
-            // Deduct stock
             product.setAvailable(product.getAvailable() - cartItem.getQuantity());
             productRepository.save(product);
         }
 
-        // Clear cart
         cartItemRepository.deleteBySessionId(sessionId);
 
         return savedOrder;

@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/cart")
@@ -26,6 +27,14 @@ import org.springframework.web.bind.annotation.*;
 public class CartController {
 
     private final CartService cartService;
+
+    private HttpSession getRequiredSession(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session == null || session.getAttribute("userId") == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please login first");
+        }
+        return session;
+    }
 
     @Operation(summary = "Add a product to the cart")
     @ApiResponses({
@@ -37,11 +46,8 @@ public class CartController {
     @PostMapping
     public ResponseEntity<?> addToCart(@Valid @RequestBody AddToCartRequest request,
                                        HttpServletRequest httpRequest) {
+        HttpSession session = getRequiredSession(httpRequest);
         try {
-            HttpSession session = httpRequest.getSession(false);
-            if (session == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             return ResponseEntity.ok(cartService.addToCart(session.getId(), request));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -56,11 +62,8 @@ public class CartController {
     })
     @GetMapping
     public ResponseEntity<?> getCart(HttpServletRequest httpRequest) {
+        HttpSession session = getRequiredSession(httpRequest);
         try {
-            HttpSession session = httpRequest.getSession(false);
-            if (session == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             return ResponseEntity.ok(cartService.getCart(session.getId()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -78,11 +81,8 @@ public class CartController {
     public ResponseEntity<?> modifyCartItem(@PathVariable Long cartItemId,
                                             @Valid @RequestBody ModifyCartRequest request,
                                             HttpServletRequest httpRequest) {
+        HttpSession session = getRequiredSession(httpRequest);
         try {
-            HttpSession session = httpRequest.getSession(false);
-            if (session == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             return ResponseEntity.ok(cartService.modifyCartItem(session.getId(), cartItemId, request.getQuantity()));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(e.getMessage());
@@ -99,11 +99,8 @@ public class CartController {
     @DeleteMapping("/{cartItemId}")
     public ResponseEntity<?> removeCartItem(@PathVariable Long cartItemId,
                                             HttpServletRequest httpRequest) {
+        HttpSession session = getRequiredSession(httpRequest);
         try {
-            HttpSession session = httpRequest.getSession(false);
-            if (session == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             cartService.removeCartItem(session.getId(), cartItemId);
             return ResponseEntity.ok("Item removed from cart");
         } catch (RuntimeException e) {
@@ -120,15 +117,9 @@ public class CartController {
     })
     @PostMapping("/checkout")
     public ResponseEntity<?> checkout(HttpServletRequest httpRequest) {
+        HttpSession session = getRequiredSession(httpRequest);
         try {
-            HttpSession session = httpRequest.getSession(false);
-            if (session == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             Long userId = (Long) session.getAttribute("userId");
-            if (userId == null) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Please login first");
-            }
             Order order = cartService.checkout(session.getId(), userId);
             return ResponseEntity.ok("Order #" + order.getId() + " placed successfully. Total: $" + order.getTotal());
         } catch (RuntimeException e) {
